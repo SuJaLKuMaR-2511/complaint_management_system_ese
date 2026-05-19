@@ -27,11 +27,10 @@ const callOpenRouter = async (prompt) => {
     throw new Error('OPENROUTER_API_KEY is not configured');
   }
 
-  const models = [
-    'deepseek/deepseek-v3-base:free',
-    'meta-llama/llama-3.1-8b-instruct:free',
-    'mistralai/mistral-7b-instruct:free'
-  ];
+  const models = (process.env.OPENROUTER_MODELS || 'openai/gpt-oss-20b:free,meta-llama/llama-3.3-8b-instruct:free,deepseek/deepseek-chat-v3-0324:free')
+    .split(',')
+    .map((m) => m.trim())
+    .filter(Boolean);
 
   let lastError = null;
 

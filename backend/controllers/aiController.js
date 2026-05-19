@@ -14,7 +14,7 @@ const callOpenRouter = async (prompt) => {
       'X-Title': 'AI Complaint Management System'
     },
     body: JSON.stringify({
-      model: 'deepseek/deepseek-r1:free',
+      model: 'deepseek/deepseek-v4-flash:free',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 500,
       temperature: 0.7

@@ -2,32 +2,76 @@ const Complaint = require('../models/Complaint');
 const fetch = require('node-fetch');
 
 /**
- * Call OpenRouter AI API (free models like mistralai/mistral-7b-instruct)
+ * Extract first JSON object from AI output safely.
+ */
+const extractJsonObject = (rawText) => {
+  const cleaned = rawText.replace(/```json|```/gi, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (_) {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+    throw new Error('No valid JSON object found in AI response');
+  }
+};
+
+/**
+ * Call OpenRouter AI API with model fallback.
  */
 const callOpenRouter = async (prompt) => {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://complaint-management.onrender.com',
-      'X-Title': 'AI Complaint Management System'
-    },
-    body: JSON.stringify({
-      model: 'deepseek/deepseek-v4-flash:free',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 500,
-      temperature: 0.7
-    })
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`OpenRouter API Error: ${errText}`);
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is not configured');
   }
 
-  const data = await response.json();
-  return data.choices[0].message.content.trim();
+  const models = [
+    'deepseek/deepseek-v3-base:free',
+    'meta-llama/llama-3.1-8b-instruct:free',
+    'mistralai/mistral-7b-instruct:free'
+  ];
+
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://complaint-management.onrender.com',
+          'X-Title': 'AI Complaint Management System'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 500,
+          temperature: 0.3
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        lastError = `Model ${model}: ${errText}`;
+        continue;
+      }
+
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content || typeof content !== 'string') {
+        lastError = `Model ${model}: Empty response content`;
+        continue;
+      }
+      return content.trim();
+    } catch (err) {
+      lastError = `Model ${model}: ${err.message}`;
+    }
+  }
+
+  throw new Error(`OpenRouter API Error: ${lastError || 'All model attempts failed'}`);
 };
 
 /**
@@ -70,12 +114,9 @@ Respond ONLY with the JSON object, no extra text.
 
     const aiText = await callOpenRouter(prompt);
 
-    // Parse JSON safely
     let aiResult;
     try {
-      // Strip markdown code blocks if present
-      const cleaned = aiText.replace(/```json|```/g, '').trim();
-      aiResult = JSON.parse(cleaned);
+      aiResult = extractJsonObject(aiText);
     } catch (parseErr) {
       return res.status(500).json({
         success: false,
@@ -83,6 +124,14 @@ Respond ONLY with the JSON object, no extra text.
         raw: aiText
       });
     }
+
+    const validPriorities = ['Low', 'Medium', 'High', 'Critical'];
+    if (!validPriorities.includes(aiResult.priority)) {
+      aiResult.priority = 'Medium';
+    }
+    aiResult.department = (aiResult.department || 'Municipal Support Desk').toString().trim();
+    aiResult.summary = (aiResult.summary || 'Complaint received and reviewed by AI.').toString().trim();
+    aiResult.autoResponse = (aiResult.autoResponse || 'Thank you for your complaint. Our team will review and take action shortly.').toString().trim();
 
     // Save AI analysis to the complaint
     complaint.aiAnalysis = {

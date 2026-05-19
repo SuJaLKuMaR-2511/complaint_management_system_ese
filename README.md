@@ -171,6 +171,3 @@ Environment variable:
 - AI analyze complaint -> priority, department, summary, auto-response
 - Admin updates status -> status reflected in UI and API
 
-## Exam Submission Note
-
-License file is typically not mandatory for end-semester submissions unless explicitly required by your faculty rubric.

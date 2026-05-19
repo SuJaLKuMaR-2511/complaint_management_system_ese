@@ -19,6 +19,23 @@ const extractJsonObject = (rawText) => {
 };
 
 /**
+ * Get currently available free chat models from OpenRouter.
+ */
+const getOpenRouterFreeModels = async () => {
+  const response = await fetch('https://openrouter.ai/api/v1/models');
+  if (!response.ok) {
+    throw new Error(`Failed to fetch model list: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const models = (data?.data || [])
+    .map((m) => m?.id)
+    .filter((id) => typeof id === 'string' && id.endsWith(':free'));
+
+  return models;
+};
+
+/**
  * Call OpenRouter AI API with model fallback.
  */
 const callOpenRouter = async (prompt) => {
@@ -27,10 +44,26 @@ const callOpenRouter = async (prompt) => {
     throw new Error('OPENROUTER_API_KEY is not configured');
   }
 
-  const models = (process.env.OPENROUTER_MODELS || 'openai/gpt-oss-20b:free,meta-llama/llama-3.3-8b-instruct:free,deepseek/deepseek-chat-v3-0324:free')
+  const configuredModels = (process.env.OPENROUTER_MODELS || '')
     .split(',')
     .map((m) => m.trim())
     .filter(Boolean);
+  let models = configuredModels;
+
+  if (models.length === 0 || process.env.OPENROUTER_AUTO_MODELS === 'true') {
+    try {
+      const discovered = await getOpenRouterFreeModels();
+      if (discovered.length > 0) {
+        models = discovered;
+      }
+    } catch (_) {
+      // Ignore discovery failure and continue with configured models if any.
+    }
+  }
+
+  if (models.length === 0) {
+    throw new Error('No OpenRouter models configured. Set OPENROUTER_MODELS or enable OPENROUTER_AUTO_MODELS=true.');
+  }
 
   let lastError = null;
 

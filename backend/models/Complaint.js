@@ -46,7 +46,7 @@ const ComplaintSchema = new mongoose.Schema({
   },
   // AI Analysis Fields
   aiAnalysis: {
-    priority: { type: String, enum: ['Low', 'Medium', 'High', 'Critical'], default: null },
+    priority: { type: String, enum: ['Low', 'Medium', 'High', 'Critical', null], default: null },
     department: { type: String, default: null },
     summary: { type: String, default: null },
     autoResponse: { type: String, default: null }
